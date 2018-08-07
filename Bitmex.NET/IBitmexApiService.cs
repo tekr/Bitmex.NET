@@ -1,9 +1,11 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Threading.Tasks;
 
 namespace Bitmex.NET
 {
-	public interface IBitmexApiService
+	public interface IBitmexApiService : IDisposable
 	{
-		Task<TResult> Execute<TParams, TResult>(ApiActionAttributes<TParams, TResult> apiAction, TParams @params);
+		Task<TResult> Execute<TParams, TResult>(ApiActionAttributes<TParams, TResult> apiAction, TParams @params,
+		    IBitmexAuthorization bitmexAuthorization = null);
 	}
 }

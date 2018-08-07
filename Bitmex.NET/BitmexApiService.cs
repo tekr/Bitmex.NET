@@ -1,52 +1,74 @@
-﻿using Bitmex.NET.Models;
+﻿using System;
+using System.Net.Http;
 using Newtonsoft.Json;
-using System;
 using System.Threading.Tasks;
+using Bitmex.NET.Models;
 
 namespace Bitmex.NET
 {
 	public class BitmexApiService : IBitmexApiService
 	{
-		private readonly IBitmexApiProxy _bitmexApiProxy;
+	    private readonly IBitmexAuthorization _bitmexAuthorization;
+	    private readonly IBitmexApiProxy _bitmexApiProxy = new BitmexApiProxy();
 
-		public BitmexApiService(IBitmexApiProxy bitmexApiProxy)
+        protected BitmexApiService(IBitmexAuthorization bitmexAuthorization)
 		{
-			_bitmexApiProxy = bitmexApiProxy;
+		    _bitmexAuthorization = bitmexAuthorization;
 		}
 
-		protected BitmexApiService(IBitmexAuthorization bitmexAuthorization)
+		public async Task<TResult> Execute<TParams, TResult>(ApiActionAttributes<TParams, TResult> apiAction,
+		    TParams @params, IBitmexAuthorization bitmexAuthorization = null)
 		{
-			_bitmexApiProxy = new BitmexApiProxy(bitmexAuthorization);
+		    bitmexAuthorization = bitmexAuthorization ?? _bitmexAuthorization;
+
+		    if (bitmexAuthorization == null)
+		    {
+		        throw new InvalidOperationException("No IBitmexAuthorization instance specified");
+		    }
+
+            return JsonConvert.DeserializeObject<TResult>(await _bitmexApiProxy.RequestAsync(bitmexAuthorization,
+		        ToHttpMethod(apiAction.Method), apiAction.Action, @params));
 		}
 
-		public async Task<TResult> Execute<TParams, TResult>(ApiActionAttributes<TParams, TResult> apiAction, TParams @params)
-		{
-			switch (apiAction.Method)
-			{
-				case HttpMethods.GET:
-					var getQueryParams = @params as IQueryStringParams;
-					return JsonConvert.DeserializeObject<TResult>(
-						await _bitmexApiProxy.Get(apiAction.Action, getQueryParams));
-				case HttpMethods.POST:
-					var postQueryParams = @params as IJsonQueryParams;
-					return JsonConvert.DeserializeObject<TResult>(
-						await _bitmexApiProxy.Post(apiAction.Action, postQueryParams));
-				case HttpMethods.PUT:
-					var putQueryParams = @params as IJsonQueryParams;
-					return JsonConvert.DeserializeObject<TResult>(
-						await _bitmexApiProxy.Put(apiAction.Action, putQueryParams));
-				case HttpMethods.DELETE:
-					var deleteQueryParams = @params as IJsonQueryParams;
-					return JsonConvert.DeserializeObject<TResult>(
-						await _bitmexApiProxy.Delete(apiAction.Action, deleteQueryParams));
-				default:
-					throw new ArgumentOutOfRangeException();
-			}
-		}
+	    public void Dispose()
+	    {
+	        _bitmexApiProxy.Dispose();
+	    }
 
-		public static IBitmexApiService CreateDefaultApi(IBitmexAuthorization bitmexAuthorization)
-		{
-			return new BitmexApiService(bitmexAuthorization);
-		}
+        /// <summary>
+        /// Creates a new API service instance
+        ///
+        /// In typical single-account scenarios, account details are passed in here via the bitmexAuthorization
+        /// parameter and are omitted on calls to Execute().
+        ///
+        /// Alternatively they may be omitted here and passed in when calling Execute(), which enables trading
+        /// on multiple accounts via one TCP connection.
+        /// </summary>
+        ///
+        /// <param name="bitmexAuthorization">Account authorization. May be omitted here and specified on
+        /// Execute() calls instead</param>
+        /// 
+        /// <returns>A new API service instance</returns>
+	    public static IBitmexApiService CreateDefaultApi(IBitmexAuthorization bitmexAuthorization = null)
+	    {
+	        return new BitmexApiService(bitmexAuthorization);
+	    }
+
+        private static HttpMethod ToHttpMethod(HttpMethods method)
+	    {
+	        switch (method)
+	        {
+	            case HttpMethods.GET:
+	                return HttpMethod.Get;
+	            case HttpMethods.PUT:
+	                return HttpMethod.Put;
+	            case HttpMethods.POST:
+	                return HttpMethod.Post;
+	            case HttpMethods.DELETE:
+	                return HttpMethod.Delete;
+	            default:
+	                throw new ArgumentOutOfRangeException();
+	        }
+	    }
 	}
 }

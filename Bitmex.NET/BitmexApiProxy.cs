@@ -3,6 +3,7 @@ using Bitmex.NET.Dtos;
 using Bitmex.NET.Models;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Concurrent;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -15,64 +16,36 @@ namespace Bitmex.NET
     {
         private static readonly ILog Log = LogProvider.GetCurrentClassLogger();
 
-        private readonly IBitmexAuthorization _bitmexAuthorization;
+        private readonly ConcurrentDictionary<BitmexEnvironment, HttpClient> _clientByEnv = new ConcurrentDictionary<BitmexEnvironment, HttpClient>();
+
         private readonly IExpiresTimeProvider _expiresTimeProvider;
         private readonly ISignatureProvider _signatureProvider;
 
-        private readonly HttpClient _httpClient;
-
-        public BitmexApiProxy(IBitmexAuthorization bitmexAuthorization, IExpiresTimeProvider expiresTimeProvider, ISignatureProvider signatureProvider)
+        public BitmexApiProxy(IExpiresTimeProvider expiresTimeProvider, ISignatureProvider signatureProvider)
         {
-            _bitmexAuthorization = bitmexAuthorization;
             _expiresTimeProvider = expiresTimeProvider;
             _signatureProvider = signatureProvider;
-
-            _httpClient = new HttpClient { BaseAddress = new Uri($"https://{Environments.Values[_bitmexAuthorization.BitmexEnvironment]}") };
-
-            _httpClient.DefaultRequestHeaders.Add("api-key", _bitmexAuthorization.Key ?? string.Empty);
-            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/xml"));
-            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/xml"));
-            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/javascript"));
-            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/javascript"));
         }
 
-        public BitmexApiProxy(IBitmexAuthorization bitmexAuthorization) : this(bitmexAuthorization, new ExpiresTimeProvider(), new SignatureProvider())
+        public BitmexApiProxy() : this(new ExpiresTimeProvider(), new SignatureProvider())
         {
         }
 
-        public Task<string> Get(string action, IQueryStringParams parameters)
+        public async Task<string> RequestAsync<T>(IBitmexAuthorization authorization, HttpMethod method, string action, T parameters)
         {
-            var query = parameters?.ToQueryString() ?? string.Empty;
-            var request = new HttpRequestMessage(HttpMethod.Get, GetUrl(action) + (string.IsNullOrWhiteSpace(query) ? string.Empty : "?" + query));
+            var queryString = (parameters as IQueryStringParams)?.ToQueryString() ?? string.Empty;
+            var content = (parameters as IJsonQueryParams)?.ToJson() ?? string.Empty;
 
-            return SendAndGetResponseAsync(request);
-        }
-
-        public Task<string> Post(string action, IJsonQueryParams parameters) => SendAndGetResponseAsync(HttpMethod.Post, action, parameters);
-
-        public Task<string> Put(string action, IJsonQueryParams parameters) => SendAndGetResponseAsync(HttpMethod.Put, action, parameters);
-
-        public Task<string> Delete(string action, IJsonQueryParams parameters) => SendAndGetResponseAsync(HttpMethod.Delete, action, parameters);
-
-        private Task<string> SendAndGetResponseAsync(HttpMethod method, string action, IJsonQueryParams parameters)
-        {
-            var content = parameters?.ToJson() ?? string.Empty;
-            var request = new HttpRequestMessage(method, GetUrl(action))
+            var request = new HttpRequestMessage(method, "/api/v1/" + action + (string.IsNullOrWhiteSpace(queryString) ? string.Empty : "?" + queryString))
             {
                 Content = new StringContent(content, Encoding.UTF8, "application/json")
             };
 
-            return SendAndGetResponseAsync(request, content);
-        }
-
-        private async Task<string> SendAndGetResponseAsync(HttpRequestMessage request, string @params = null)
-        {
-            Sign(request, @params);
+            Sign(authorization, request, content);
 
             Log.Debug($"{request.Method} {request.RequestUri}");
 
-            var response = await _httpClient.SendAsync(request);
+            var response = await GetClient(authorization.BitmexEnvironment).SendAsync(request);
             var responseString = await response.Content.ReadAsStringAsync();
 
             Log.Debug($"{request.Method} {request.RequestUri.PathAndQuery} {(response.IsSuccessStatusCode ? "resp" : "errorResp")}:{responseString}");
@@ -92,13 +65,37 @@ namespace Bitmex.NET
             return responseString;
         }
 
-        private void Sign(HttpRequestMessage request, string @params)
+        public void Dispose()
         {
+            foreach (var client in _clientByEnv.Values)
+            {
+                client.Dispose();
+            }
+        }
+
+        private void Sign(IBitmexAuthorization bitmexAuthorization, HttpRequestMessage request, string @params)
+        {
+            request.Headers.Add("api-key", bitmexAuthorization.Key ?? string.Empty);
             request.Headers.Add("api-expires", _expiresTimeProvider.Get().ToString());
-            request.Headers.Add("api-signature", _signatureProvider.CreateSignature(_bitmexAuthorization.Secret ?? string.Empty,
+            request.Headers.Add("api-signature", _signatureProvider.CreateSignature(bitmexAuthorization.Secret ?? string.Empty,
                 $"{request.Method}{request.RequestUri}{_expiresTimeProvider.Get().ToString()}{@params}"));
         }
 
-        private static string GetUrl(string action) => "/api/v1/" + action;
+        private HttpClient GetClient(BitmexEnvironment bitmexEnvironment)
+        {
+            return _clientByEnv.GetOrAdd(bitmexEnvironment,
+                env =>
+                {
+                    var httpClient = new HttpClient { BaseAddress = new Uri($"https://{Environments.Values[env]}") };
+
+                    httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                    httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/xml"));
+                    httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/xml"));
+                    httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/javascript"));
+                    httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/javascript"));
+
+                    return httpClient;
+                });
+        }
     }
 }
