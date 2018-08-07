@@ -5,7 +5,6 @@ namespace Bitmex.NET
 {
 	public interface IBitmexApiService : IDisposable
 	{
-		Task<TResult> Execute<TParams, TResult>(ApiActionAttributes<TParams, TResult> apiAction, TParams @params,
-		    IBitmexAuthorization bitmexAuthorization = null);
+		Task<TResult> Execute<TParams, TResult>(ApiActionAttributes<TParams, TResult> apiAction, TParams @params);
 	}
 }
