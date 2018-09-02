@@ -1,5 +1,6 @@
 ﻿using Bitmex.NET.Authorization;
 using Bitmex.NET.Dtos;
+using Bitmex.NET.Logging;
 using Bitmex.NET.Models;
 using Newtonsoft.Json;
 using System;
@@ -8,7 +9,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
-using Bitmex.NET.Logging;
 
 namespace Bitmex.NET
 {
@@ -35,7 +35,6 @@ namespace Bitmex.NET
         {
             var queryString = (parameters as IQueryStringParams)?.ToQueryString() ?? string.Empty;
             var content = (parameters as IJsonQueryParams)?.ToJson() ?? string.Empty;
-
             var request = new HttpRequestMessage(method, "/api/v1/" + action + (string.IsNullOrWhiteSpace(queryString) ? string.Empty : "?" + queryString))
             {
                 Content = new StringContent(content, Encoding.UTF8, "application/json")
