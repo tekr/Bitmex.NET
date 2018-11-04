@@ -7,7 +7,7 @@ namespace Bitmex.NET
 	    private readonly IBitmexAuthorization _bitmexAuthorization;
 	    private readonly IBitmexMultiAccountApiService _apiService = BitmexMultiAccountApiService.CreateDefaultApi();
 
-        protected BitmexApiService(IBitmexAuthorization bitmexAuthorization)
+        public BitmexApiService(IBitmexAuthorization bitmexAuthorization)
 		{
 		    _bitmexAuthorization = bitmexAuthorization;
 		}

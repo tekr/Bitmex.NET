@@ -34,10 +34,11 @@ namespace Bitmex.NET
         public async Task<string> RequestAsync<T>(IBitmexAuthorization authorization, HttpMethod method, string action, T parameters)
         {
             var queryString = (parameters as IQueryStringParams)?.ToQueryString() ?? string.Empty;
-            var content = (parameters as IJsonQueryParams)?.ToJson() ?? string.Empty;
+            var content = (parameters as IJsonQueryParams)?.ToJson();
+
             var request = new HttpRequestMessage(method, "/api/v1/" + action + (string.IsNullOrWhiteSpace(queryString) ? string.Empty : "?" + queryString))
             {
-                Content = new StringContent(content, Encoding.UTF8, "application/json")
+                Content = content != null ? new StringContent(content, Encoding.UTF8, "application/json") : null
             };
 
             Sign(authorization, request, content);
