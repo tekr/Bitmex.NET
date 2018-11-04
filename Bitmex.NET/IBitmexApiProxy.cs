@@ -1,13 +1,11 @@
-﻿using Bitmex.NET.Models;
+﻿using System;
+using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace Bitmex.NET
 {
-	public interface IBitmexApiProxy
+	public interface IBitmexApiProxy : IDisposable
 	{
-		Task<string> Get(string action, IQueryStringParams parameters);
-		Task<string> Post(string action, IJsonQueryParams parameters);
-        Task<string> Put(string action, IJsonQueryParams parameters);
-        Task<string> Delete(string action, IJsonQueryParams parameters);
+	    Task<string> RequestAsync<T>(IBitmexAuthorization authorization, HttpMethod method, string action, T parameters);
     }
 }
